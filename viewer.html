@@ -14,8 +14,6 @@
     --fuse: #caa46a;
     --spark: #ffcc33;
     --danger: #ff3b3b;
-    --ok: #52ffa8;
-    --accent: #7aa2ff;
   }
   html,body{height:100%}
   body{
@@ -39,9 +37,7 @@
   @keyframes flick { from{ opacity:.85; transform: scale(1);} to{ opacity:1; transform: scale(1.12);} }
 
   /* BOOM overlay */
-  .boom{
-    position:absolute; inset:0; display:none; place-items:center; background: transparent;
-  }
+  .boom{ position:absolute; inset:0; display:none; place-items:center; }
   .boom.active{ display:grid; animation: shake 0.35s ease-in-out 2; }
   .flash{
     position:absolute; inset:0; border-radius:50%;
@@ -74,19 +70,6 @@
   <div class="stage" aria-hidden="true">
     <!-- Escena SVG: bomba + mecha -->
     <svg viewBox="0 0 800 800" role="img" aria-label="Bomb with burning fuse">
-      <!-- Mecha (curva) -->
-      <path id="fusePath" d="M 500 280 C 560 200, 700 200, 720 300
-                             C 740 410, 620 420, 590 360
-                             C 560 300, 500 330, 470 380
-                             C 450 410, 420 420, 390 420"
-            fill="none" stroke="var(--fuse)" stroke-width="10" stroke-linecap="round" />
-
-      <!-- Chispa -->
-      <g id="spark" class="spark">
-        <circle r="10" fill="var(--spark)"></circle>
-        <circle r="4" fill="#fff"></circle>
-      </g>
-
       <!-- Bomba (cuerpo) -->
       <defs>
         <radialGradient id="bombGrad" cx="60%" cy="40%">
@@ -94,17 +77,37 @@
           <stop offset="100%" stop-color="var(--bomb)"/>
         </radialGradient>
       </defs>
+
+      <!-- Cuerpo de la bomba -->
       <circle id="bomb" cx="360" cy="520" r="180" fill="url(#bombGrad)" />
       <!-- Brillo -->
       <circle cx="430" cy="460" r="40" fill="rgba(255,255,255,0.08)" />
-      <!-- Mecha conectada a la bomba -->
-      <rect x="370" y="330" width="20" height="40" rx="6" fill="#6b4f2d"/>
+      <!-- Cuello / mecha base (justo sobre la "tapa" de la bomba) -->
+      <rect x="350" y="330" width="20" height="40" rx="6" fill="#6b4f2d"/>
+
+      <!-- Mecha: arranca en el cuello (370,330) y serpentea hacia arriba-derecha -->
+      <!-- pathLength=1 nos permite trabajar con progreso [0..1] -->
+      <path id="fusePath"
+            d="M 360 330
+               C 380 270, 470 260, 520 300
+               C 600 360, 650 260, 700 320
+               C 740 370, 640 420, 560 380
+               C 500 350, 440 360, 420 340"
+            fill="none"
+            stroke="var(--fuse)" stroke-width="10" stroke-linecap="round"
+            pathLength="1" />
+
+      <!-- Chispa -->
+      <g id="spark" class="spark">
+        <circle r="10" fill="var(--spark)"></circle>
+        <circle r="4" fill="#fff"></circle>
+      </g>
 
       <!-- Humo suave (decorativo) -->
       <g opacity="0.08">
-        <circle cx="500" cy="280" r="18" fill="#fff"/>
-        <circle cx="520" cy="260" r="10" fill="#fff"/>
-        <circle cx="540" cy="270" r="14" fill="#fff"/>
+        <circle cx="520" cy="300" r="18" fill="#fff"/>
+        <circle cx="540" cy="280" r="10" fill="#fff"/>
+        <circle cx="560" cy="290" r="14" fill="#fff"/>
       </g>
     </svg>
 
@@ -121,7 +124,7 @@
 </div>
 
 <script>
-/* Utilidades de codificación base64url (mismo formato que tu editor) */
+/* Utilidades base64url */
 function b64uDecode(b64){
   try{
     const s = atob(b64.replace(/-/g,'+').replace(/_/g,'/'));
@@ -145,12 +148,10 @@ function pad(n){ return String(n).padStart(2,'0'); }
     return;
   }
 
-  const titleEl = document.getElementById('title');
-  const textEl  = document.getElementById('text');
-  titleEl.innerText = data.title || "Contest countdown";
-  textEl.innerText  = data.text  || "Solve the challenge before the fuse burns out!";
+  document.getElementById('title').innerText = data.title || "Contest countdown";
+  document.getElementById('text').innerText  = data.text  || "Solve the challenge before the fuse burns out!";
 
-  // Determinar inicio (igual que en tu viewer previo)
+  // Determinar inicio (igual que antes)
   const key = 'count:'+hash;
   let firstOpen;
   if(data.mode === 'firstAccessClient'){
@@ -160,78 +161,81 @@ function pad(n){ return String(n).padStart(2,'0'); }
   } else if(data.mode === 'absolute'){
     firstOpen = data.createdAt || Date.now();
   } else {
-    // fallback: per-browser
     const existing = localStorage.getItem(key);
     firstOpen = existing ? Number(existing) : Date.now();
     if(!existing) localStorage.setItem(key, String(firstOpen));
   }
 
-  const lifetime = Number(data.lifetime_ms) || 0;
+  const lifetime = Math.max(0, Number(data.lifetime_ms) || 0);
   const expiresAt = firstOpen + lifetime;
 
-  // Referencias SVG
-  const fuse = document.getElementById('fusePath');
+  // SVG refs
+  const fuse  = document.getElementById('fusePath');
   const spark = document.getElementById('spark');
-  const bomb = document.getElementById('bomb');
-  const boom = document.getElementById('boom');
+  const bomb  = document.getElementById('bomb');
+  const boom  = document.getElementById('boom');
 
-  // Preparar la mecha: usaremos stroke-dashoffset para “consumirla”
+  // Mecha preparada para ser "recortada" desde el inicio (cuello de la bomba)
+  // Con pathLength=1, dasharray=1 y dashoffset en [0..1] consumimos la mecha desde la bomba hacia fuera.
+  fuse.style.strokeDasharray = 1;
+  fuse.style.strokeDashoffset = 0;
+
   const totalLen = fuse.getTotalLength();
-  fuse.style.strokeDasharray = totalLen;
-  fuse.style.strokeDashoffset = 0; // 0 = completa; aumenta hasta totalLen a medida que se consume
 
-  // Actualización de UI
   const timerEl = document.getElementById('timer');
-  const statusEl = document.getElementById('status');
-  const liveEl = document.getElementById('sr-live');
+  const statusEl= document.getElementById('status');
+  const liveEl  = document.getElementById('sr-live');
 
   let ended = false;
-  function formatRemaining(ms){
-    const d = Math.floor(ms / 86400000);
-    const h = Math.floor(ms % 86400000 / 3600000);
-    const m = Math.floor(ms % 3600000 / 60000);
-    const s = Math.floor(ms % 60000 / 1000);
-    const hh = pad(h), mm = pad(m), ss = pad(s);
-    return (d>0? d+'d ':'') + `${hh}:${mm}:${ss}`;
+  function fmt(ms){
+    const d = Math.floor(ms/86400000);
+    const h = Math.floor(ms%86400000/3600000);
+    const m = Math.floor(ms%3600000/60000);
+    const s = Math.floor(ms%60000/1000);
+    return (d>0? d+'d ':'') + `${pad(h)}:${pad(m)}:${pad(s)}`;
   }
 
   function tick(){
     const now = Date.now();
-    const remaining = Math.max(0, expiresAt - now);
+    const rem = Math.max(0, expiresAt - now);
 
-    // Texto
-    if(remaining <= 0){
+    if(rem <= 0){
       if(!ended){
         ended = true;
         timerEl.textContent = "00:00:00";
         statusEl.textContent = "Time is up.";
         liveEl.textContent = "Countdown finished.";
-        // Animación BOOM
+
+        // BOOM
         bomb.style.opacity = 0;
         boom.classList.add('active');
-        // Oculta mecha y chispa
         fuse.style.opacity = 0.1;
         spark.style.display = 'none';
       }
-      return; // detener animación visual (dejar boom activo)
-    } else {
-      timerEl.textContent = formatRemaining(remaining);
-      statusEl.textContent = `Expires at: ${new Date(expiresAt).toLocaleString()}`;
+      return;
     }
 
-    // Progreso [0..1]
-    const progress = 1 - (remaining / lifetime); // 0 al inicio, 1 al final
-    const dash = Math.min(totalLen, Math.max(0, totalLen * progress));
-    fuse.style.strokeDashoffset = dash;
+    timerEl.textContent = fmt(rem);
+    statusEl.textContent = `Expires at: ${new Date(expiresAt).toLocaleString()}`;
 
-    // Mover chispa a lo largo de la mecha (desde inicio hacia fin)
-    const point = fuse.getPointAtLength(Math.min(totalLen, dash));
-    spark.setAttribute('transform', `translate(${point.x}, ${point.y})`);
+    // Progreso [0..1] desde el inicio (0) hasta el final (1)
+    const progress = 1 - (rem / lifetime);
+    const p = Math.min(1, Math.max(0, progress));
+
+    // Consumimos la mecha desde la bomba hacia afuera
+    fuse.style.strokeDashoffset = p;
+
+    // Posición de la chispa: a lo largo del path según progreso real
+    const pt = fuse.getPointAtLength(totalLen * p);
+    spark.setAttribute('transform', `translate(${pt.x}, ${pt.y})`);
 
     requestAnimationFrame(tick);
   }
 
-  // Inicia la animación
+  // Coloca la chispa al inicio exacto (cuello) antes del primer frame
+  const startPt = fuse.getPointAtLength(0);
+  spark.setAttribute('transform', `translate(${startPt.x}, ${startPt.y})`);
+
   requestAnimationFrame(tick);
 })();
 </script>
