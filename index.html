@@ -68,16 +68,23 @@ document.getElementById('gen').addEventListener('click', ()=>{
   const mode = document.getElementById('mode').value;
 
   const lifetime_ms = msFrom(duration, unit);
-  const payload = {title, text, lifetime_ms, mode, createdAt: Date.now()};
-  const hash = base64urlEncode(payload);
+    const payload = { title, text, lifetime_ms, mode, createdAt: Date.now() };
+    const hash = base64urlEncode(payload);
 
-  const urlBase = location.origin + location.pathname.replace(/editor\.html$/,'viewer.html');
-  const url = mode === 'firstAccessGlobal' ? `${location.origin}/view?id=${hash}` : `${urlBase}#${hash}`;
+    // Construye la URL del viewer correctamente, esté donde esté el index:
+    const basePath = location.pathname.endsWith('/')
+      ? location.pathname
+      : location.pathname.replace(/[^\/]*$/, ''); // quita el fichero actual
+    const viewerUrl = location.origin + basePath + 'viewer.html';
 
-  const out = document.getElementById('result');
-  out.style.display = 'block';
-  out.innerHTML = `<strong>Shareable URL</strong><br><a href="${url}" target="_blank">${url}</a><br><small style="opacity:.7">Mode: ${mode}</small>`;
-});
+    const url = mode === 'firstAccessGlobal'
+      ? `${location.origin}/view?id=${hash}` // (para cuando tengas Worker)
+      : `${viewerUrl}#${hash}`;
+
+    const out = document.getElementById('result');
+    out.style.display = 'block';
+    out.innerHTML = `<strong>Shareable URL</strong><br><a href="${url}" target="_blank">${url}</a><br><small style="opacity:.7">Mode: ${mode}</small>`;
+  });
 </script>
 </body>
 </html>
