@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Countdown generator</title>
+<style>
+  body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;max-width:760px;margin:30px auto;padding:16px}
+  label{display:block;margin-top:12px}
+  input,select,button,textarea{width:100%;padding:8px;margin-top:6px;border-radius:6px;border:1px solid #ddd}
+  .row{display:flex;gap:8px}
+  .row > *{flex:1}
+  .out{background:#f7f7f8;padding:12px;border-radius:8px;margin-top:12px;word-break:break-all}
+</style>
+</head>
+<body>
+<h1>Create a shareable countdown</h1>
+
+<label>Title
+  <input id="title" placeholder="Eg. Product launch"/>
+</label>
+
+<label>Description (optional)
+  <textarea id="text" rows="3" placeholder="Short note shown with the countdown"></textarea>
+</label>
+
+<label>Duration
+  <div class="row">
+    <input id="duration" type="number" value="24" min="1"/>
+    <select id="unit">
+      <option value="hours">Hours</option>
+      <option value="minutes">Minutes</option>
+      <option value="days">Days</option>
+    </select>
+  </div>
+</label>
+
+<label>Start mode
+  <select id="mode">
+    <option value="absolute">Start immediately — ends after duration from now</option>
+    <option value="firstAccessClient">Start when each visitor first opens (client only)</option>
+    <option value="firstAccessGlobal">Start when *first person* opens (requires serverless function)</option>
+  </select>
+</label>
+
+<button id="gen">Generate link</button>
+
+<div class="out" id="result" style="display:none;"></div>
+
+<script>
+function msFrom(value, unit){
+  const v = Number(value) || 0;
+  if(unit === 'minutes') return v*60*1000;
+  if(unit === 'hours') return v*3600*1000;
+  if(unit === 'days') return v*24*3600*1000;
+  return v*3600*1000;
+}
+function base64urlEncode(obj){
+  const j = JSON.stringify(obj);
+  return btoa(unescape(encodeURIComponent(j))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+
+document.getElementById('gen').addEventListener('click', ()=>{
+  const title = document.getElementById('title').value.trim();
+  const text = document.getElementById('text').value.trim();
+  const duration = document.getElementById('duration').value;
+  const unit = document.getElementById('unit').value;
+  const mode = document.getElementById('mode').value;
+
+  const lifetime_ms = msFrom(duration, unit);
+  const payload = {title, text, lifetime_ms, mode, createdAt: Date.now()};
+  const hash = base64urlEncode(payload);
+
+  const urlBase = location.origin + location.pathname.replace(/editor\.html$/,'viewer.html');
+  const url = mode === 'firstAccessGlobal' ? `${location.origin}/view?id=${hash}` : `${urlBase}#${hash}`;
+
+  const out = document.getElementById('result');
+  out.style.display = 'block';
+  out.innerHTML = `<strong>Shareable URL</strong><br><a href="${url}" target="_blank">${url}</a><br><small style="opacity:.7">Mode: ${mode}</small>`;
+});
+</script>
+</body>
+</html>
