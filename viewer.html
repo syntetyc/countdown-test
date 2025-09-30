@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Shared countdown</title>
+<style>
+  body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;max-width:760px;margin:30px auto;padding:24px;text-align:center}
+  h1{font-size:24px;margin-bottom:6px}
+  .desc{color:#555;margin-bottom:18px}
+  .timer{font-size:40px;font-weight:700;margin:18px 0}
+  .muted{color:#777;font-size:13px}
+</style>
+</head>
+<body>
+<div id="app">
+  <h1 id="title">Loading…</h1>
+  <div class="desc" id="text"></div>
+  <div class="timer" id="timer">--:--:--</div>
+  <div class="muted" id="status"></div>
+</div>
+
+<script>
+function base64urlDecode(b64){
+  try{
+    const s = atob(b64.replace(/-/g,'+').replace(/_/g,'/'));
+    return JSON.parse(decodeURIComponent(escape(s)));
+  }catch(e){ return null; }
+}
+function pad(n){ return String(n).padStart(2,'0'); }
+function renderExpired(){ document.getElementById('timer').innerText = "Expired"; document.getElementById('status').innerText = ""; }
+
+(async function(){
+  // inspect hash or query param id
+  const q = new URLSearchParams(location.search);
+  const idParam = q.get('id');
+  let raw = idParam || location.hash.slice(1);
+  if(!raw){ document.getElementById('title').innerText = "No countdown data"; return; }
+
+  // If it's the "global" mode with id, call /view endpoint (serverless)
+  if(idParam){
+    try{
+      const res = await fetch(`/view?id=${encodeURIComponent(idParam)}`);
+      if(res.status === 200){
+        const json = await res.json();
+        // server returns payload object (not encoded)
+        raw = btoa(unescape(encodeURIComponent(JSON.stringify(json.payload)))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+      } else if(res.status === 410) {
+        document.getElementById('title').innerText = "This countdown has expired.";
+        renderExpired();
+        return;
+      } else {
+        document.getElementById('title').innerText = "Link not found or server error.";
+        return;
+      }
+    } catch(err){
+      document.getElementById('title').innerText = "Server unreachable.";
+      return;
+    }
+  }
+
+  const data = base64urlDecode(raw);
+  if(!data){ document.getElementById('title').innerText = "Invalid link"; return; }
+
+  document.getElementById('title').innerText = data.title || "Untitled countdown";
+  document.getElementById('text').innerText = data.text || "";
+
+  // Determine firstOpen: client mode (per-browser) stores firstOpen in localStorage.
+  const key = 'count:' + raw;
+  let firstOpen = null;
+  if(data.mode === 'firstAccessClient'){
+    const existing = localStorage.getItem(key);
+    if(existing) firstOpen = Number(existing);
+    else { firstOpen = Date.now(); localStorage.setItem(key, String(firstOpen)); }
+  } else if(data.mode === 'absolute'){
+    // absolute: createdAt + lifetime_ms
+    firstOpen = data.createdAt || Date.now();
+  } else {
+    // for global mode without server fallback, behave as firstAccessClient
+    const existing = localStorage.getItem(key);
+    if(existing) firstOpen = Number(existing);
+    else { firstOpen = Date.now(); localStorage.setItem(key, String(firstOpen)); }
+  }
+
+  const expiresAt = firstOpen + (Number(data.lifetime_ms) || 0);
+
+  function update(){
+    const now = Date.now();
+    const rem = expiresAt - now;
+    if(rem <= 0){ renderExpired(); clearInterval(iv); return; }
+    const days = Math.floor(rem / (24*3600*1000));
+    const hours = Math.floor(rem % (24*3600*1000) / 3600000);
+    const minutes = Math.floor(rem % 3600000 / 60000);
+    const seconds = Math.floor(rem % 60000 / 1000);
+    const s = (days>0? days+'d ':'') + pad(hours)+':'+pad(minutes)+':'+pad(seconds);
+    document.getElementById('timer').innerText = s;
+    document.getElementById('status').innerText = `Expires at: ${new Date(expiresAt).toLocaleString()}`;
+  }
+  update();
+  const iv = setInterval(update, 1000);
+})();
+</script>
+</body>
+</html>
